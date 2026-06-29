@@ -1,31 +1,37 @@
 # Poultry respiratory 16S metabarcode pipeline — PRJNA400142
 
-Reproducible pipeline for BioProject **PRJNA400142**. The pipeline downloads the raw single-end FASTQ files directly from **ENA FASTQ links** to avoid SSL/certificate problems observed with older `prefetch/fasterq-dump` installations, filters reads with **PRINSEQ-lite**, processes V4 16S reads with **QIIME 2 2024.10**, classifies ASVs with a **Greengenes2 2024.09 V4 Naive Bayes classifier**, generates the manuscript-style Figure 3 panels, and writes reviewer-ready sequencing summary tables.
+This repository contains the reproducible workflow used to document the 16S rRNA amplicon sequencing analysis for BioProject **PRJNA400142**. It was organized for the reviewer response and includes only the steps that were successfully executed during the final reanalysis.
 
-The pipeline was written to reproduce and document the sequencing analysis described in the manuscript *Bacterial community of the respiratory tract of clinically healthy broilers*.
+The workflow downloads the single-end FASTQ files directly from **ENA FASTQ links**, filters reads with **PRINSEQ-lite**, processes the V4 16S reads with **QIIME 2 2024.10** and **DADA2**, classifies ASVs with a **Greengenes2 2024.09 V4 Naive Bayes classifier**, exports reviewer-ready read/ASV tables, and generates Figure 3-style taxonomic panels.
 
-## Main outputs needed for reviewers
+## Main reviewer outputs
 
-After a successful run, the key reviewer files are:
+After the successful workflow finishes, the files most relevant to the reviewer response are:
 
 ```text
 results/reviewer_report/reviewer_sequencing_summary.tsv
 results/reviewer_report/reviewer_sequencing_summary.md
-results/exported/shannon_kruskal_wallis.tsv
 results/exported/feature_table.tsv
 results/exported/rarefied_table.tsv
 results/exported/denoising_stats/stats.tsv
+results/exported/taxonomy/taxonomy.tsv
+results/exported/taxa_level3.tsv
+results/exported/taxa_level6.tsv
+results/exported/shannon/alpha-diversity.tsv
 results/figures/Figure_3_panel.png
 results/figures/Figure_3_panel.pdf
 results/figures/Figure_3_panel.svg
 results/figures/exact_from_article_script/fig_ABCD_A4.png
 results/figures/exact_from_article_script/fig_ABCD_A4.svg
-results/figures/shannon_alpha_diversity.png
-results/figures/shannon_alpha_diversity.pdf
-results/figures/shannon_alpha_diversity.svg
 ```
 
-The file `results/reviewer_report/reviewer_sequencing_summary.tsv` reports, per sample, the raw FASTQ counts, PRINSEQ-filtered reads, DADA2/QIIME 2 counts, non-rarefied reads and ASVs, rarefied reads and ASVs, retained percentage after rarefaction, and whether the sample was included at the rarefaction depth of 7,503 sequences.
+The key reviewer table is:
+
+```text
+results/reviewer_report/reviewer_sequencing_summary.tsv
+```
+
+It reports, per sample, raw FASTQ reads, PRINSEQ-filtered reads, DADA2-filtered reads, denoised reads, non-chimeric reads, ASVs per sample, rarefied reads, ASVs retained after rarefaction, the rarefaction depth, retained percentage, and whether the sample was included in the rarefied alpha-diversity analysis.
 
 ## Repository structure
 
@@ -36,12 +42,15 @@ metadata/
   sample-metadata.tsv
 scripts/
   00_check_dependencies.sh
-  01_download_sra_prjna400142.sh      # ENA FASTQ download for PRJNA400142
+  01_download_sra_prjna400142.sh
   02_prinseq_filter_and_import.sh
-  03_qiime2_cutadapt_dada2_taxonomy.sh
+  03a_cutadapt_dada2_only.sh
+  03b_resume_after_dada2_lowmem_taxonomy.sh
+  03c_resume_after_taxonomy_no_ordination.sh
   04_make_figures.py
   05_make_reviewer_report.py
-  make_all_panels_exact.py            # exact plotting script supplied in Final_Figures_dados
+  06_patch_exact_panel_script.sh
+  make_all_panels_exact.py
   run_pipeline.sh
 METHOD.md
 REVIEWER_RESPONSE.md
@@ -49,17 +58,18 @@ RUN_REVIEWER_REPORT.md
 README.md
 ```
 
-## 1. Installation
+## Successful workflow used in the final reanalysis
 
-Activate your QIIME 2 2024.10 environment:
+### 1. Activate QIIME 2 and set paths
 
 ```bash
+cd ~/Benito/poultry-metabarcode-pipeline
 conda activate qiime2-amplicon-2024.10
 export PATH="$CONDA_PREFIX/bin:$PATH"
 hash -r
 ```
 
-Install the extra tools required by this pipeline:
+### 2. Install the required utilities
 
 ```bash
 conda install -n qiime2-amplicon-2024.10 \
@@ -67,49 +77,17 @@ conda install -n qiime2-amplicon-2024.10 \
   prinseq matplotlib-venn biom-format pandas numpy scipy matplotlib wget curl -y
 ```
 
-Check that PRINSEQ is available:
+Check PRINSEQ:
 
 ```bash
 which prinseq-lite.pl || find "$CONDA_PREFIX" -iname '*prinseq*' 2>/dev/null | head
 ```
 
-## 2. Clone or update the repository
+### 3. Download the FASTQ files from ENA
+
+The successful download path used ENA direct FASTQ links, not `prefetch` or `fasterq-dump`.
 
 ```bash
-git clone https://github.com/mattoslmp/poultry-metabarcode-pipeline.git
-cd poultry-metabarcode-pipeline
-chmod +x scripts/*.sh
-```
-
-If the repository already exists locally:
-
-```bash
-cd ~/Benito/poultry-metabarcode-pipeline
-git pull origin main
-chmod +x scripts/*.sh
-```
-
-If `git pull` is blocked by local changes, save them first:
-
-```bash
-git status --short
-mkdir -p backup_local_changes
-cp scripts/03_qiime2_cutadapt_dada2_taxonomy.sh backup_local_changes/03_qiime2_local_backup.sh 2>/dev/null || true
-git stash push -m "backup local changes before update"
-git pull origin main
-chmod +x scripts/*.sh
-```
-
-## 3. Download FASTQ files from ENA
-
-The download step now uses ENA direct FASTQ links and does not require `prefetch` or `fasterq-dump`:
-
-```bash
-cd ~/Benito/poultry-metabarcode-pipeline
-conda activate qiime2-amplicon-2024.10
-export PATH="$CONDA_PREFIX/bin:$PATH"
-hash -r
-
 bash scripts/01_download_sra_prjna400142.sh
 ```
 
@@ -124,23 +102,21 @@ data/raw_fastq/SRR5975921.fastq.gz
 data/raw_fastq/SRR5975922.fastq.gz
 ```
 
-Check the download:
+### 4. Use the checked sample metadata
 
 ```bash
-ls -lh data/raw_fastq/
-cat metadata/run_accessions.txt
-cat metadata/sample-metadata.auto.tsv
+cat > metadata/sample-metadata.tsv <<'EOF'
+sample-id	body_site
+SRR5975917	Lung
+SRR5975918	Trachea
+SRR5975919	Lung
+SRR5975920	Trachea
+SRR5975921	Lung
+SRR5975922	Trachea
+EOF
 ```
 
-## 4. Prepare the Greengenes2 classifier
-
-The taxonomy step expects the Greengenes2 2024.09 V4 classifier here:
-
-```text
-reference/gg2-2024.09-v4-classifier-sklearn-1.4.2.qza
-```
-
-Download it:
+### 5. Download the Greengenes2 V4 classifier
 
 ```bash
 mkdir -p reference
@@ -151,32 +127,105 @@ wget -c \
 qiime tools peek reference/gg2-2024.09-v4-classifier-sklearn-1.4.2.qza
 ```
 
-The expected QIIME 2 type is `FeatureData[TaxonomicClassifier]`.
+The expected artifact type is:
 
-## 5. Run the full analysis
+```text
+FeatureData[TaxonomicClassifier]
+```
 
-Use `&&` so the pipeline stops if one step fails:
+### 6. Create a QIIME temporary directory outside `/tmp`
+
+This avoids failures caused by a full system `/tmp` directory.
 
 ```bash
-bash scripts/02_prinseq_filter_and_import.sh && \
-bash scripts/03_qiime2_cutadapt_dada2_taxonomy.sh && \
-python3 scripts/04_make_figures.py && \
+mkdir -p tmp_qiime
+rm -rf tmp_qiime/*
+export TMPDIR="$PWD/tmp_qiime"
+export TEMP="$TMPDIR"
+export TMP="$TMPDIR"
+```
+
+### 7. Run PRINSEQ filtering and QIIME import
+
+```bash
+bash scripts/02_prinseq_filter_and_import.sh
+```
+
+This step applies the manuscript filter:
+
+```text
+PRINSEQ-lite: reads >100 bp; mean Phred quality >=30
+```
+
+### 8. Run primer trimming and DADA2 only
+
+```bash
+bash scripts/03a_cutadapt_dada2_only.sh
+```
+
+This generates:
+
+```text
+results/qiime/table.qza
+results/qiime/rep-seqs.qza
+results/qiime/denoising-stats.qza
+```
+
+### 9. Run low-memory taxonomy classification
+
+```bash
+export TAXONOMY_JOBS=1
+export READS_PER_BATCH=50
+export OMP_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+bash scripts/03b_resume_after_dada2_lowmem_taxonomy.sh
+```
+
+This generates:
+
+```text
+results/qiime/taxonomy.qza
+results/qiime/taxa_level3.qza
+results/qiime/taxa_level6.qza
+results/qiime/taxa-bar-plots.qzv
+```
+
+### 10. Rarefy and export results without beta ordination
+
+The successful reviewer workflow used direct rarefaction and Shannon calculation, avoiding beta-diversity ordination because it was not required for the reviewer request.
+
+```bash
+export RAREFY_DEPTH=3743
+bash scripts/03c_resume_after_taxonomy_no_ordination.sh
+```
+
+The rarefaction depth of **3,743 reads per sample** was selected because it retained samples from both anatomical sites after filtering, denoising and chimera removal.
+
+### 11. Generate the reviewer table
+
+```bash
 python3 scripts/05_make_reviewer_report.py
 ```
 
-Alternatively, once all dependencies and the classifier are present:
+Main output:
 
-```bash
-bash scripts/run_pipeline.sh
+```text
+results/reviewer_report/reviewer_sequencing_summary.tsv
 ```
 
-## 6. Generate the exact Figure 3 layout from the supplied manuscript plotting script
-
-The repository includes the exact plotting script supplied in `Final_Figures_dados`: `scripts/make_all_panels_exact.py`.
-
-Run it after `table.qza` and `taxonomy.qza` have been generated:
+### 12. Generate figures
 
 ```bash
+python3 scripts/04_make_figures.py
+```
+
+To generate the Figure 3 layout using the plotting script supplied with the manuscript data package:
+
+```bash
+bash scripts/06_patch_exact_panel_script.sh
 mkdir -p results/figures/exact_from_article_script
 
 python3 scripts/make_all_panels_exact.py \
@@ -189,64 +238,32 @@ python3 scripts/make_all_panels_exact.py \
   --outdir results/figures/exact_from_article_script
 ```
 
-This creates:
+## One-command workflow
 
-```text
-results/figures/exact_from_article_script/fig_ABCD_A4.png
-results/figures/exact_from_article_script/fig_ABCD_A4.svg
-results/figures/exact_from_article_script/venn.png
-results/figures/exact_from_article_script/venn.svg
-results/figures/exact_from_article_script/heatmap_genus.png
-results/figures/exact_from_article_script/heatmap_genus.svg
-```
-
-## 7. Files to send or use for the reviewer response
-
-Use these files for the reviewer response and revised manuscript:
+After installing dependencies and downloading the Greengenes2 classifier, the successful workflow can be run with:
 
 ```bash
-ls -lh results/reviewer_report/
-cat results/reviewer_report/reviewer_sequencing_summary.tsv
-cat results/reviewer_report/reviewer_sequencing_summary.md
-ls -lh results/figures/
+bash scripts/run_pipeline.sh
 ```
 
-Important files:
+## Notes for the reviewer response
 
-- `results/reviewer_report/reviewer_sequencing_summary.tsv`: table requested by reviewers.
-- `results/reviewer_report/reviewer_sequencing_summary.md`: reviewer-friendly markdown report.
-- `results/exported/shannon_kruskal_wallis.tsv`: H statistic and p-value.
-- `results/figures/Figure_3_panel.*`: manuscript-style Figure 3 generated by the pipeline plotting script.
-- `results/figures/exact_from_article_script/fig_ABCD_A4.*`: Figure 3 layout generated by the exact supplied manuscript script.
-- `results/figures/figure3A_class_barplot.*`: Figure 3A.
-- `results/figures/figure3B_genus_barplot.*`: Figure 3B.
-- `results/figures/figure3C_venn.*`: Figure 3C.
-- `results/figures/figure3D_genus_heatmap.*`: Figure 3D.
-- `results/figures/shannon_alpha_diversity.*`: rarefied Shannon diversity figure.
+The manuscript reports **358,104 fragments** as the initial sequencing output. The reviewer table reports the reads retained after the documented filtering, denoising and chimera-removal steps. These are different stages of the same sequencing workflow and should not be interpreted as the same count.
 
-## 8. Methodological target implemented
+The final reviewer table provides exactly the additional information requested by the reviewer: per-sample read counts after processing, number of ASVs per sample, and the rarefaction depth/retention information used to justify the alpha-diversity analysis.
 
-This repository implements the following workflow:
+## Associated manuscript
 
-1. Download raw single-end FASTQ reads for BioProject PRJNA400142 using ENA direct FASTQ links.
-2. Filter raw reads with PRINSEQ-lite, retaining reads longer than 100 bp and with mean Phred quality score >= 30.
-3. Import filtered single-end reads into QIIME 2.
-4. Remove 515F/806R V4 primers and reverse complements using q2-cutadapt with 5-prime anchored matching and minimum 15-nt overlap.
-5. Denoise with DADA2 single-end mode using `trim-left = 0`, `trunc-len = 0`, and consensus chimera removal.
-6. Classify representative ASVs using `classify-sklearn` and the Greengenes2 2024.09 V4 classifier.
-7. Collapse feature tables to class (L3) and genus (L6) ranks.
-8. Generate stacked bar charts for lung vs. trachea at class and genus levels.
-9. Generate genus-level Venn and heatmap figures.
-10. Rarefy to 7,503 reads per sample and calculate Shannon diversity.
-11. Compare lung vs. trachea Shannon diversity with a two-sided Kruskal-Wallis test.
-12. Generate reviewer-ready read-count and ASV-count summary tables.
+**Title:** Bacterial community of the respiratory tract of clinically healthy broilers
 
-## 9. Rarefaction justification
+**Authors:** Soares BD; Kunert-Filho HC; Grassotti TT; Gazal LES; Carvalho D; Pereira LM; Oliveira RR; Borges KA; Furian TQ; Nickel VS; Brito KCT; Kobayashi RKT; Destri GAD; Otutumi LK; Brito BG.
 
-Rarefaction to 7,503 sequences per sample is used to normalize sequencing depth across samples before diversity estimation. This standardization reduces sampling-depth bias and allows Shannon diversity and Kruskal-Wallis comparisons to be performed at a common sequencing depth across lung and trachea samples. Samples with fewer reads than the selected depth are excluded by the QIIME 2 core-metrics workflow.
+**Journal:** Brazilian Journal of Poultry Science / Revista Brasileira de Ciência Avícola.
 
-## Citation and data availability
+**Status:** Manuscript submitted and currently under evaluation.
 
-Raw sequence data: BioProject **PRJNA400142**.
+## Data availability
+
+Raw sequence data: NCBI/ENA BioProject **PRJNA400142**.
 
 Pipeline repository: https://github.com/mattoslmp/poultry-metabarcode-pipeline

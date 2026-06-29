@@ -4,10 +4,10 @@
 # Project and compute settings
 BIOPROJECT="${BIOPROJECT:-PRJNA400142}"
 THREADS="${THREADS:-8}"
-MAX_SRA_SIZE="${MAX_SRA_SIZE:-200G}"
 
-# PRINSEQ-lite filtering
-# The manuscript states reads >100 bp, therefore the implemented minimum is 101.
+# PRINSEQ-lite filtering.
+# The manuscript states reads >100 bp and mean Phred quality >= 30.
+# Therefore the implemented minimum length is 101 and the mean quality cutoff is 30.
 PRINSEQ_MIN_LEN="${PRINSEQ_MIN_LEN:-101}"
 PRINSEQ_MIN_QUAL_MEAN="${PRINSEQ_MIN_QUAL_MEAN:-30}"
 PRINSEQ_EXTRA_OPTS="${PRINSEQ_EXTRA_OPTS:-}"
@@ -20,20 +20,21 @@ PRIMER_806R_RC="${PRIMER_806R_RC:-ATTAGAWACCCBNGTAGTCC}"
 CUTADAPT_OVERLAP="${CUTADAPT_OVERLAP:-15}"
 CUTADAPT_ERROR_RATE="${CUTADAPT_ERROR_RATE:-0.1}"
 
-# DADA2 single-end settings
+# DADA2 single-end settings.
 DADA2_TRIM_LEFT="${DADA2_TRIM_LEFT:-0}"
 DADA2_TRUNC_LEN="${DADA2_TRUNC_LEN:-0}"
 DADA2_CHIMERA_METHOD="${DADA2_CHIMERA_METHOD:-consensus}"
 
-# Alpha diversity rarefaction depth
-RAREFY_DEPTH="${RAREFY_DEPTH:-7503}"
+# Successful rarefaction depth used for the reviewer response.
+# This depth retains samples from both anatomical sites after filtering/denoising.
+RAREFY_DEPTH="${RAREFY_DEPTH:-3743}"
 
-# Classifier path. Place the classifier here or export CLASSIFIER_QZA before running.
+# Classifier path. Place the classifier here before running taxonomy.
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CLASSIFIER_QZA="${CLASSIFIER_QZA:-${PROJECT_DIR}/reference/gg2-2024.09-v4-classifier-sklearn-1.4.2.qza}"
 CLASSIFIER_URL="${CLASSIFIER_URL:-}"
 
-# Directory layout
+# Directory layout.
 RAW_DIR="${RAW_DIR:-${PROJECT_DIR}/data/raw_fastq}"
 FILTERED_DIR="${FILTERED_DIR:-${PROJECT_DIR}/data/filtered_prinseq}"
 METADATA_DIR="${METADATA_DIR:-${PROJECT_DIR}/metadata}"

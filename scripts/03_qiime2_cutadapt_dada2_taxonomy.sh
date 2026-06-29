@@ -41,6 +41,11 @@ qiime dada2 denoise-single \
   --o-denoising-stats "${QIIME_DIR}/denoising-stats.qza" \
   --verbose
 
+qiime feature-table summarize \
+  --i-table "${QIIME_DIR}/table.qza" \
+  --m-sample-metadata-file "${METADATA_TSV}" \
+  --o-visualization "${QIIME_DIR}/table.qzv"
+
 qiime feature-classifier classify-sklearn \
   --i-classifier "${CLASSIFIER_QZA}" \
   --i-reads "${QIIME_DIR}/rep-seqs.qza" \
@@ -84,13 +89,28 @@ qiime diversity alpha-rarefaction \
   --m-metadata-file "${METADATA_TSV}" \
   --o-visualization "${QIIME_DIR}/alpha_rarefaction_max_${RAREFY_DEPTH}.qzv"
 
-rm -rf "${EXPORTED_DIR}/taxa_level3" "${EXPORTED_DIR}/taxa_level6" "${EXPORTED_DIR}/taxonomy" "${EXPORTED_DIR}/shannon"
+rm -rf \
+  "${EXPORTED_DIR}/feature_table" \
+  "${EXPORTED_DIR}/rarefied_table" \
+  "${EXPORTED_DIR}/denoising_stats" \
+  "${EXPORTED_DIR}/taxa_level3" \
+  "${EXPORTED_DIR}/taxa_level6" \
+  "${EXPORTED_DIR}/taxonomy" \
+  "${EXPORTED_DIR}/shannon"
+
+qiime tools export --input-path "${QIIME_DIR}/table.qza" --output-path "${EXPORTED_DIR}/feature_table"
+qiime tools export --input-path "${QIIME_DIR}/core-metrics-phylogenetic-${RAREFY_DEPTH}/rarefied_table.qza" --output-path "${EXPORTED_DIR}/rarefied_table"
+qiime tools export --input-path "${QIIME_DIR}/denoising-stats.qza" --output-path "${EXPORTED_DIR}/denoising_stats"
 qiime tools export --input-path "${QIIME_DIR}/taxa_level3.qza" --output-path "${EXPORTED_DIR}/taxa_level3"
 qiime tools export --input-path "${QIIME_DIR}/taxa_level6.qza" --output-path "${EXPORTED_DIR}/taxa_level6"
 qiime tools export --input-path "${QIIME_DIR}/taxonomy.qza" --output-path "${EXPORTED_DIR}/taxonomy"
 qiime tools export --input-path "${QIIME_DIR}/core-metrics-phylogenetic-${RAREFY_DEPTH}/shannon_vector.qza" --output-path "${EXPORTED_DIR}/shannon"
+
+biom convert -i "${EXPORTED_DIR}/feature_table/feature-table.biom" -o "${EXPORTED_DIR}/feature_table.tsv" --to-tsv
+biom convert -i "${EXPORTED_DIR}/rarefied_table/feature-table.biom" -o "${EXPORTED_DIR}/rarefied_table.tsv" --to-tsv
 biom convert -i "${EXPORTED_DIR}/taxa_level3/feature-table.biom" -o "${EXPORTED_DIR}/taxa_level3.tsv" --to-tsv
 biom convert -i "${EXPORTED_DIR}/taxa_level6/feature-table.biom" -o "${EXPORTED_DIR}/taxa_level6.tsv" --to-tsv
 cp "${METADATA_TSV}" "${EXPORTED_DIR}/sample-metadata.used.tsv"
+echo "${RAREFY_DEPTH}" > "${EXPORTED_DIR}/rarefaction_depth.txt"
 
 echo "Done: QIIME 2 processing complete."

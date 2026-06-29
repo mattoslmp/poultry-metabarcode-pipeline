@@ -1,0 +1,17 @@
+name: poultry-metabarcode-utils
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - sra-tools
+  - entrez-direct
+  - prinseq-lite
+  - biom-format
+  - pandas
+  - numpy
+  - scipy
+  - matplotlib
+  - matplotlib-venn
+  - wget

@@ -24,7 +24,8 @@ done
 if command -v prinseq-lite.pl >/dev/null 2>&1; then
   echo "[OK] prinseq-lite.pl: $(command -v prinseq-lite.pl)"
 elif command -v prinseq-lite >/dev/null 2>&1; then
-  echo "[OK] prinseq-lite: $(command -v prinseq-lite)"\else
+  echo "[OK] prinseq-lite: $(command -v prinseq-lite)"
+else
   echo "[MISSING] prinseq-lite.pl or prinseq-lite"
   missing=1
 fi

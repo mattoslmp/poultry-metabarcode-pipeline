@@ -248,9 +248,8 @@ bash scripts/run_pipeline.sh
 
 ## Notes for the reviewer response
 
-The manuscript reports **358,104 fragments** as the initial sequencing output. The reviewer table reports the reads retained after the documented filtering, denoising and chimera-removal steps. These are different stages of the same sequencing workflow and should not be interpreted as the same count.
+The manuscript reports **358,104 fragments** as the initial sequencing output. The table reports the reads retained after the documented filtering, denoising and chimera-removal steps. These are different stages of the same sequencing workflow and should not be interpreted as the same count.
 
-The final reviewer table provides exactly the additional information requested by the reviewer: per-sample read counts after processing, number of ASVs per sample, and the rarefaction depth/retention information used to justify the alpha-diversity analysis.
 
 ## Associated manuscript
 
